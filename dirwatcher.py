@@ -8,6 +8,7 @@ import logging
 from datetime import datetime as dt
 import os
 import textwrap
+import signal
 
 if sys.version_info[0] < 3:
     print('\n\tSincerest apologies, gotta use Python3\n')
@@ -15,6 +16,7 @@ if sys.version_info[0] < 3:
 
 # globals
 exit_flag = False
+logger = ''
 
 
 def create_parser(args):
@@ -56,7 +58,14 @@ def create_parser(args):
 
 def set_log_level(log_code):
     '''Takes log level code as argument and returns log level
-     to be used for logger instantiation'''
+     to be used for logger instantiation
+
+     Parameters:
+
+     log_code: the integer code supplied as an arg on the command-line
+
+     Return: The log level to be supplied to a new logger instance
+     '''
     log_levels = {
         '1': logging.DEBUG,
         '2': logging.INFO,
@@ -73,7 +82,14 @@ def set_log_level(log_code):
 
 
 def create_logger(log_level):
-    '''Create and return a new logger instance with a level of log_level'''
+    '''Create and return a new logger instance with a level of log_level
+
+    Parameters:
+
+    log_level: the level at which the log should be reporting/outputting
+
+    Return: A logger instance
+    '''
 
     # formatting variables
     log_format = '%(asctime)s | %(levelname)s | func: %(funcName)s ' +\
@@ -89,6 +105,23 @@ def create_logger(log_level):
     return logger
 
 
+def signal_handler(sig_num, frame):
+    '''A handler for various signals. THe main() function will loop
+    indefinitely until the signal is received by this function
+
+    Parameters:
+
+    sig_num: The integer code of the signal received by the OS
+    frame: unused
+
+    Return:
+    None
+    '''
+    logger.warning('Received {}'.format(signal.Signals(sig_num).name))
+    global exit_flag
+    exit_flag = True
+
+
 def main(args):
     # create parser for shell arguments
     parser = create_parser(args)
@@ -96,16 +129,23 @@ def main(args):
 
     # create logger
     log_level = set_log_level(ns.loglevel)
+    global logger
     logger = create_logger(log_level)
 
     # banner log to indicate program start
-    logger.debug(textwrap.dedent('''
+    logger.info(textwrap.dedent('''
     --------------------------------
         dirwatcher.py started at
         {}
         Process ID: {}
-    --------------------------------
-    '''.format(dt.now(), os.getpid())))
+    --------------------------------'''.format(dt.now(), os.getpid())))
+
+    # connect signal handlers
+    signals = [signal.SIGINT, signal.SIGTERM, signal.SIGHUP]
+    for sig in signals:
+        signal.signal(sig, signal_handler)
+        logger.debug('{} signal handler connected'.format(
+            signal.Signals(sig).name))
 
 
 if __name__ == '__main__':
