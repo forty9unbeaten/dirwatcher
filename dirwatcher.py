@@ -16,11 +16,19 @@ if sys.version_info[0] < 3:
 
 # globals
 exit_flag = False
-logger = ''
+logger = logging.getLogger(__file__)
 
 
 def create_parser(args):
-    '''Create and return a command-line argument parser'''
+    '''
+    Create and return a command-line argument parser
+
+    Parameters:
+
+    args: Arguments present and given via the command-line
+
+    Return: An ArgumentParser instance
+    '''
     parser = argparse.ArgumentParser(
         description='Monitors the creation of files with a specified ' +
         'extension and searches those files for a string of specified text',
@@ -57,15 +65,16 @@ def create_parser(args):
 
 
 def set_log_level(log_code):
-    '''Takes log level code as argument and returns log level
-     to be used for logger instantiation
+    '''
+    Takes log level code as argument and returns log level
+    to be used for logger instantiation
 
-     Parameters:
+    Parameters:
 
-     log_code: the integer code supplied as an arg on the command-line
+    log_code: the integer code supplied as an arg on the command-line
 
-     Return: The log level to be supplied to a new logger instance
-     '''
+    Return: The log level to be supplied to a new logger instance
+    '''
     log_levels = {
         '1': logging.DEBUG,
         '2': logging.INFO,
@@ -81,14 +90,15 @@ def set_log_level(log_code):
         raise
 
 
-def create_logger(log_level):
-    '''Create and return a new logger instance with a level of log_level
+def config_logger(log_level):
+    '''
+    Configure the logger instance with a level of log_level
 
     Parameters:
 
     log_level: the level at which the log should be reporting/outputting
 
-    Return: A logger instance
+    Return: None
     '''
 
     # formatting variables
@@ -101,12 +111,27 @@ def create_logger(log_level):
         format=log_format,
         datefmt=log_date_format,
         level=log_level)
-    logger = logging.getLogger(__file__)
-    return logger
+
+
+def config_signal_handlers():
+    '''
+    Attach handlers to various OS signals that the program may receive
+
+    Parameters: None
+
+    Return: None
+    '''
+    signals = [signal.SIGINT, signal.SIGTERM, signal.SIGHUP]
+    for sig in signals:
+        signal.signal(sig, signal_handler)
+        logger.debug('{} signal handler connected'.format(
+            signal.Signals(sig).name))
+    logger.info('All signal handlers connected')
 
 
 def signal_handler(sig_num, frame):
-    '''A handler for various signals. THe main() function will loop
+    '''
+    A handler for various signals. THe main() function will loop
     indefinitely until the signal is received by this function
 
     Parameters:
@@ -127,25 +152,30 @@ def main(args):
     parser = create_parser(args)
     ns = parser.parse_args()
 
-    # create logger
+    # logger configuration
     log_level = set_log_level(ns.loglevel)
-    global logger
-    logger = create_logger(log_level)
+    config_logger(log_level)
 
     # banner log to indicate program start
+    prog_start_time = dt.now()
     logger.info(textwrap.dedent('''
     --------------------------------
         dirwatcher.py started at
         {}
         Process ID: {}
-    --------------------------------'''.format(dt.now(), os.getpid())))
-
+    --------------------------------'''.format(prog_start_time, os.getpid())))
     # connect signal handlers
-    signals = [signal.SIGINT, signal.SIGTERM, signal.SIGHUP]
-    for sig in signals:
-        signal.signal(sig, signal_handler)
-        logger.debug('{} signal handler connected'.format(
-            signal.Signals(sig).name))
+    config_signal_handlers()
+
+    # banner log to indicate program end
+    prog_end_time = dt.now()
+    total_uptime = prog_end_time - prog_start_time
+    logger.info(textwrap.dedent('''
+    --------------------------------
+        dirwatcher.py ended at
+        {}
+        Total Uptime: {}
+    --------------------------------'''.format(prog_end_time, total_uptime)))
 
 
 if __name__ == '__main__':
