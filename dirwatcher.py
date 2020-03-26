@@ -175,19 +175,25 @@ def watch_directories(directory, file_ext, magic_text, interval):
                 + ' Text: {}, Interval: {}'.format(magic_text, interval))
 
     while not exit_flag:
-        logger.info('Getting list of files with extension {} in {}'.format(
-            file_ext, directory_path))
-        files = [file for file in os.listdir(
-            directory_path) if re.search(extension_regex, file)]
+        try:
+            logger.info('Getting list of files with extension {} in {}'.format(
+                file_ext, directory_path))
+            files = [file for file in os.listdir(
+                directory_path) if re.search(extension_regex, file)]
 
-        # add and remove appropriate files from cache dictionary
-        logger.info('Checking for new files in {}'.format(directory_path))
-        file_cache = sync_added_files(file_cache, files)
-        logger.info('Checking for deleted files in {}'.format(directory_path))
-        file_cache = sync_deleted_files(file_cache, files)
+            # add and remove appropriate files from cache dictionary
+            logger.info('Checking for new files in {}'.format(directory_path))
+            file_cache = sync_added_files(file_cache, files)
+            logger.info(
+                'Checking for deleted files in {}'.format(directory_path))
+            file_cache = sync_deleted_files(file_cache, files)
 
-        # delay next polling in accordance with interval
-        time.sleep(interval)
+            # delay next polling in accordance with interval
+            time.sleep(interval)
+        except FileNotFoundError:
+            logger.warn('Directory {} does not exist'.format(directory_path))
+        except Exception:
+            raise
 
 
 def sync_added_files(cache, files):
