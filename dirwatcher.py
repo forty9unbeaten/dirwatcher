@@ -51,11 +51,11 @@ def create_parser(args):
                         default=1.0)
     parser.add_argument('-l', '--loglevel',
                         help='number that determines program log ' +
-                        'verbosity\n\t1 - DEBUG (default)\n\t2 - INFO\n' +
+                        'verbosity\n\t1 - DEBUG\n\t2 - INFO (default)\n' +
                         '\t3 - WARNING\n\t4 - ERROR\n\t5 - CRITICAL',
                         metavar='',
                         dest='loglevel',
-                        default=1)
+                        default=2)
 
     # print help if no args are supplied on command-line
     if not args:
@@ -104,12 +104,11 @@ def config_logger(log_level):
     '''
 
     # formatting variables
-    log_format = '%(asctime)s | %(levelname)s | func: %(funcName)s ' +\
+    log_format = '%(asctime)s |%(levelname)s| func: %(funcName)s ' +\
         '| line: %(lineno)d | %(message)s'
-    log_date_format = '%b %d, %Y < %I:%M:%S %p >'
+    log_date_format = '%b %d, %Y <%I:%M:%S %p>'
 
     logging.basicConfig(
-        filename='dirwatcher.log',
         format=log_format,
         datefmt=log_date_format,
         level=log_level)
@@ -149,7 +148,7 @@ def signal_handler(sig_num, frame):
     exit_flag = True
 
 
-def watch_directories(directory, file_ext, magic_text, interval):
+def watch_directory(directory, file_ext, magic_text, interval):
     '''
     Monitor files in a specific directory for a specific string of text
 
@@ -159,7 +158,7 @@ def watch_directories(directory, file_ext, magic_text, interval):
     file_ext: extension of the files in which to look for text string
     magic_text: the string of text for which to look
     interval: the rate at which the function looks in the directory
-    for the text
+    files for the text
 
     Return: None
     '''
@@ -176,24 +175,62 @@ def watch_directories(directory, file_ext, magic_text, interval):
 
     while not exit_flag:
         try:
-            logger.info('Getting list of files with extension {} in {}'.format(
+            # construct list of paths to files with the appropriate extension
+            logger.debug('Getting files with {} extension in {}'.format(
                 file_ext, directory_path))
-            files = [file for file in os.listdir(
-                directory_path) if re.search(extension_regex, file)]
+            files = ['{}/{}'.format(directory_path, file) for file in
+                     os.listdir(directory_path) if
+                     re.search(extension_regex, file)]
 
             # add and remove appropriate files from cache dictionary
-            logger.info('Checking for new files in {}'.format(directory_path))
+            logger.debug(
+                'Checking for new files in {}'.format(directory_path))
             file_cache = sync_added_files(file_cache, files)
-            logger.info(
+            logger.debug(
                 'Checking for deleted files in {}'.format(directory_path))
             file_cache = sync_deleted_files(file_cache, files)
 
-            # delay next polling in accordance with interval
-            time.sleep(interval)
+            if files:
+                # read files in directory, accounting for lines that
+                # have already been read
+                for file in files:
+                    start_line = file_cache[file]
+                    new_content = read_single_file(file, start_line)
+                    # if new data has been read from file, search it
+                    # for the magic text
+                    if new_content:
+                        logger.debug(
+                            'Checking newly read lines for the magic text')
+                        magic_text_lines = check_magic_text(
+                            new_content, magic_text, start_line)
+                        # if there are any lines that have the magic_text,
+                        # log the matches
+                        if magic_text_lines:
+                            for i in range(len(magic_text_lines)):
+                                logger.info(
+                                    '"{}" found in file {} on line {}'.format(
+                                        magic_text,
+                                        os.path.basename(file),
+                                        magic_text_lines[i]
+                                    )
+                                )
+                        # update the cache dictionary to reflect the new lines
+                        # that have been read
+                        file_cache[file] += len(new_content)
+            else:
+                # no files with specified extension in the directory
+                logger.debug('No files with {} extension in {}'.format(
+                    file_ext, directory_path))
         except FileNotFoundError:
-            logger.warn('Directory {} does not exist'.format(directory_path))
-        except Exception:
-            raise
+            logger.error(
+                'Directory {} does not exist'.format(directory_path))
+        except RuntimeError:
+            logger.debug('Runtime Error caused by dictionary entry deletion' +
+                         ' during program uptime. Cached file deleted from ' +
+                         'dictionary despite exception')
+
+        # delay next polling in accordance with interval
+        time.sleep(interval)
 
 
 def sync_added_files(cache, files):
@@ -210,7 +247,8 @@ def sync_added_files(cache, files):
     for file in files:
         if file not in cache.keys():
             cache[file] = 0
-            logger.info('Added {} to file cache'.format(file))
+            logger.info('Added {} to file cache'.format(
+                os.path.basename(file)))
     return cache
 
 
@@ -229,8 +267,55 @@ def sync_deleted_files(cache, files):
     for cached_file in cache.keys():
         if cached_file not in files:
             cache.pop(cached_file, None)
-            logger.info('Deleted {} from file cache'.format(cached_file))
+            logger.info('Deleted {} from file cache'.format(
+                os.path.basename(cached_file)))
     return cache
+
+
+def read_single_file(file_path, line_start):
+    '''
+    Reads a single file taking into account the lines that
+    have already been read and marked in the cache dictionary
+
+    Parameters:
+    file_path: path of the file to be read
+    line_start: the line of the file on which to start reading
+
+    Return: list containing the lines that were read from file
+    '''
+    filename = os.path.basename(file_path)
+    with open(file_path, 'r') as f:
+        try:
+            content = f.readlines()[line_start:]
+            logger.debug('Read {} lines in {}'.format(len(content), filename))
+            return content
+        except IndexError:
+            logger.warning('No new lines to read in file {}'.format(filename))
+            return []
+        except FileNotFoundError:
+            logger.warning('File named {} no longer exists'. format(filename))
+            return []
+
+
+def check_magic_text(file_lines, magic_text, first_line_num):
+    '''
+    Checks for a string of text in a list of lines read from
+    a file
+
+    Parameters:
+    file_lines: the lines from a file that need to be checked for specific text
+    magic_text: the specific text for which to search
+    first_line_num: the line number of the first line in file_lines
+
+    Return: a list with the line numbers that contain the magic_text
+    '''
+    line_num = first_line_num
+    matches = []
+    for line in file_lines:
+        if magic_text.lower() in line.lower():
+            matches.append(line_num + 1)
+        line_num += 1
+    return matches
 
 
 def main(args):
@@ -254,7 +339,7 @@ def main(args):
     config_signal_handlers()
 
     # monitor the directory for the string of text
-    watch_directories(ns.dir, ns.ext, ns.text, ns.pollint)
+    watch_directory(ns.dir, ns.ext, ns.text, ns.pollint)
 
     # banner log to indicate program end
     prog_end_time = dt.now()
