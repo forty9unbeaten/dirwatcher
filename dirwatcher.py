@@ -87,9 +87,7 @@ def set_log_level(log_code):
     try:
         return log_levels[str(log_code)]
     except KeyError:
-        return log_levels['1']
-    except Exception:
-        raise
+        return log_levels['2']
 
 
 def config_logger(log_level):
