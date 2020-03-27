@@ -168,6 +168,7 @@ def watch_directory(directory, file_ext, magic_text, interval):
     # dictionary that tracks files that have been read
     # keys are filenames and values are number of lines already read
     file_cache = {}
+
     directory_path = os.path.abspath(directory)
     logger.info('Monitored Directory: {}, File Ext: {},'.format(directory_path,
                                                                 file_ext)
@@ -194,6 +195,8 @@ def watch_directory(directory, file_ext, magic_text, interval):
                 # read files in directory, accounting for lines that
                 # have already been read
                 for file in files:
+                    logger.debug('Reading file {}'.format(
+                        os.path.basename(file)))
                     start_line = file_cache[file]
                     new_content = read_single_file(file, start_line)
                     # if new data has been read from file, search it
@@ -206,6 +209,8 @@ def watch_directory(directory, file_ext, magic_text, interval):
                         # if there are any lines that have the magic_text,
                         # log the matches
                         if magic_text_lines:
+                            logger.debug('Reporting lines in files that ' +
+                                         'contain magic text')
                             for i in range(len(magic_text_lines)):
                                 logger.info(
                                     '"{}" found in file {} on line {}'.format(
@@ -216,6 +221,8 @@ def watch_directory(directory, file_ext, magic_text, interval):
                                 )
                         # update the cache dictionary to reflect the new lines
                         # that have been read
+                        logger.debug('Updating cache dictionary to ' +
+                                     'account for lines that have been read')
                         file_cache[file] += len(new_content)
             else:
                 # no files with specified extension in the directory
@@ -227,7 +234,7 @@ def watch_directory(directory, file_ext, magic_text, interval):
         except RuntimeError:
             logger.debug('Runtime Error caused by dictionary entry deletion' +
                          ' during program uptime. Cached file deleted from ' +
-                         'dictionary despite exception')
+                         'dictionary despite raised exception')
 
         # delay next polling in accordance with interval
         time.sleep(interval)
