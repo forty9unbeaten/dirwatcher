@@ -1,1 +1,6 @@
-/venv
+*.venv/
+*.pyc
+*.log
+*test*/
+*.*test*
+*.DS_Store
